@@ -81,21 +81,38 @@ NumericVector SdPerRow(NumericMatrix obj, int type) {
 }
 
 
-// ' Compute the sequential rank agreement between k ranked lists
-// ' 
-// ' @description Computes the sequential rank agreement (number of items present in all k lists divided by the current rank) for each rank in the k lists
-// ' @param rankMat A matrix with k columns corresponding to the k ranked lists. Elements of each column are integers between 1 and the length of the lists
-// ' @param maxlength The maximum depth that are needed XXX
-// ' @param B The number of resamples to use in the presence of censored lists
-// ' @param cens A vector of integer values that
-// ' @param type The type of distance measure to use: 0 (the default) is the variance while 1 is MAD (median absolute deviation)
-// ' @return A vector of the same length as the rows in rankMat containing the squared (!) sequential rank agreement between the lists for each depth. If the MAD type was chosen then the sequential MAD values are returned
-// ' @author Claus Ekstrøm <ekstrom@@sund.ku.dk>
-// ' [[ Rcpp::export]]
-NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector cens, int type=0) {
+//' Compute the sequential rank agreement between k ranked lists
+//' 
+//' @description Computes the sequential rank agreement (number of items present in all k lists divided by the current rank) for each rank in the k lists
+//' @param rankMat A matrix with k columns corresponding to the k ranked lists. Elements of each column are integers between 1 and the length of the lists
+//' @param maxlength The maximum depth that are needed XXX
+//' @param B The number of resamples to use in the presence of censored lists
+//' @param cens A vector of integer values that
+//' @param type The type of distance measure to use: 0 (the default) is the variance while 1 is MAD (median absolute deviation)
+//' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items.
+//' @return A vector of the same length as the rows in rankMat containing the squared (!) sequential rank agreement between the lists for each depth. If the MAD type was chosen then the sequential MAD values are returned
+//' @author Claus Ekstrøm <ekstrom@@sund.ku.dk>
+//' @encoding UTF-8 
+// [[Rcpp::export]]
+NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector cens, int type=0, NumericVector epsilon=NumericVector::create(0)) {
 
   // The number of lists
   int nLists = rankMat.ncol();
+  
+  NumericVector useEpsilon(maxlength);;
+  // Check length  
+  if ((epsilon.size() != maxlength) && (epsilon.size() != 1))
+    stop("Length of epsilon must be 1 or the number of items");
+  if (is_true(any( epsilon<0 )))
+    stop("Values for epsilon must be non-negative");
+
+  if (epsilon.size()==1) {
+    std::fill(useEpsilon.begin(), useEpsilon.end(), epsilon(0));
+  } else {
+    useEpsilon = epsilon;
+  }
+
+  
 
   // Sanity check of type
   if (type != 1)
@@ -150,7 +167,6 @@ NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector 
       missingItems(_, l) = ! missingItems(_, l);
     }
 
-
     IntegerVector iv = seq_len(maxlength);
 
     // Iterate over the number of replications used to average the results from
@@ -159,6 +175,7 @@ NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector 
 
       // The set of variable to keep per depth
       LogicalVector keepDepth(maxlength, FALSE);
+      NumericVector itemWeight(maxlength);
       
       // Start by creating a permutation of any missing items for each list
       for (int l = 0; l < nLists; l++) {
@@ -186,9 +203,12 @@ NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector 
 	for (int l = 0; l < nLists; l++) {
 	  // Add variable to keep
 	  // -1 below because lists starts from 0 in C++
-	  keepDepth[x(depth, l)-1] = TRUE;	  
+	  // keepDepth[x(depth, l)-1] = TRUE;
+	  itemWeight[x(depth, l)-1] += 1.0;
 	}
-		
+
+	keepDepth = (itemWeight > useEpsilon*nLists);
+	
 	// Now weigh the metrics together
 	res = itemMetric[keepDepth];
 	result(depth, b) = mean(res);
@@ -209,14 +229,31 @@ NumericVector sracpp(IntegerMatrix rankMat, int maxlength, int B, IntegerVector 
 //' @description Computes the sequential rank agreement (number of items present in all k lists divided by the current rank) for each rank in the k lists
 //' @param rankMat A matrix with k columns corresponding to the k ranked lists. Elements of each column are integers between 1 and the length of the lists
 //' @param type The type of distance measure to use: 0 (the default) is the variance while 1 is MAD (mean absolute deviation)
+//' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items.
 //' @return A vector of the same length as the rows in rankMat containing the sequential rank agreement between the lists for each depth (squared for type=0)
 //' @author Claus Ekstrøm <ekstrom@@sund.ku.dk>
+//' @encoding UTF-8 
 // [[Rcpp::export]]
-NumericVector sracppfull(IntegerMatrix rankMat, int type=0) {
+List sracppfull(IntegerMatrix rankMat, int type=0, NumericVector epsilon=NumericVector::create(0)) {
 
   // The number of lists
   int nLists = rankMat.ncol();
   int maxlength=rankMat.nrow();
+  NumericVector useEpsilon(maxlength);
+  IntegerVector whenIncluded(maxlength, maxlength);
+
+  // Check too big
+  // Check length  
+  if ((epsilon.size() != maxlength) && (epsilon.size() != 1))
+    stop("Length of epsilon must be 1 or the number of items");
+  if (is_true(any( epsilon<0 )))
+    stop("Values for epsilon must be non-negative");
+
+  if (epsilon.size()==1) {
+    std::fill(useEpsilon.begin(), useEpsilon.end(), epsilon(0));
+  } else {
+    useEpsilon = epsilon;
+  }
 
   // Need a numeric copy of this for the sort function. Doesn't really make sense but
   // keeping it for now 
@@ -234,39 +271,52 @@ NumericVector sracppfull(IntegerMatrix rankMat, int type=0) {
   if (type != 1)
     type = 0;
 
-    // Check that dim of x is less than maxlength
-
-    // Check for no duplicates in each list
-
-    NumericMatrix itemRank(maxlength, nLists);
-    NumericVector itemMetric(maxlength);
-    NumericVector res;
-
-    //    IntegerVector iv = seq_len(maxlength);
-
-    // The set of variables to keep per depth
-    LogicalVector keepDepth(maxlength, FALSE);
-      
-    for (int l = 0; l < nLists; l++) {
-      itemRank(_, l) = order_( x( _ , l) );
-    }
-    itemMetric = SdPerRow(itemRank, type);
-
-    // Now compute the agreement for each depth
-    for (int depth=0; depth<maxlength; depth++) {
-      
-      for (int l = 0; l < nLists; l++) {
-	// Add variable to keep
-	// -1 below because lists starts from 0 in C++
-	keepDepth[x(depth, l)-1] = TRUE;	  
-      }
-      
-      // Now weigh the metrics together
-      res = itemMetric[keepDepth];
-      returnVector[depth] = mean(res);
-    }
+  // Check that dim of x is less than maxlength
+  
+  // Check for no duplicates in each list
+  
+  NumericMatrix itemRank(maxlength, nLists);
+  NumericVector itemMetric(maxlength);
+  NumericVector res;
+  
+  //    IntegerVector iv = seq_len(maxlength);
+  
+  // The set of variables to keep per depth
+  LogicalVector keepDepth(maxlength, FALSE);
+  NumericVector itemWeight(maxlength);
+  
+  for (int l = 0; l < nLists; l++) {
+    itemRank(_, l) = order_( x( _ , l) );
+  }
+  itemMetric = SdPerRow(itemRank, type);
+  
+  // Now compute the agreement for each depth
+  for (int depth=0; depth<maxlength; depth++) {
     
-    return(returnVector);
+    for (int l = 0; l < nLists; l++) {
+      // Add variable to keep
+      // -1 below because lists starts from 0 in C++
+      //      keepDepth[x(depth, l)-1] = TRUE;
+      itemWeight[x(depth, l)-1] += 1.0;  // Should be 1/maxlength but multiply that below
+      if (itemWeight[x(depth, l)-1] > useEpsilon[depth]*nLists) {
+	keepDepth[x(depth, l)-1] = TRUE;
+	whenIncluded[x(depth, l)-1] = std::min(whenIncluded[x(depth, l)-1], depth+1);
+      }
+    }
+
+    // Rcout << keepDepth << "    -->   for depth " << (depth+1) << std::endl ; 
+    
+    // Now weigh the metrics together
+    res = itemMetric[keepDepth];
+    returnVector[depth] = mean(res);
+  }
+
+  return List::create(Rcpp::Named("sra")=returnVector,
+		      Rcpp::Named("whenIncluded")=whenIncluded
+		      );
+  
+  
+  //  return(returnVector);
 }
 
 

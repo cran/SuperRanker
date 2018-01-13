@@ -5,7 +5,7 @@
 \title{Simulate sequential rank agreement for randomized unrelated lists}
 \usage{
 random_list_sra(object, B = 1, n = 1, na.strings = NULL, type = c("sd",
-  "mad"))
+  "mad"), epsilon = 0)
 }
 \arguments{
 \item{object}{A matrix or list of vectors representing ranked lists.}
@@ -21,6 +21,8 @@ censored observations}
 
 \item{type}{The type of measure to use. Either sd (standard
 deviation - the default) or mad (median absolute deviance)}
+
+\item{epsilon}{A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items. Should usually be low.}
 }
 \value{
 A matrix with n columns and the same number of rows as for the input object. Each column contains one
@@ -42,4 +44,3 @@ random_list_sra(mlist, n=5)
 \author{
 Claus Ekstrøm <ekstrom@sund.ku.dk>
 }
-

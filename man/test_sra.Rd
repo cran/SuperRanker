@@ -35,4 +35,3 @@ test_sra(null[,1],null[,-1])
 \author{
 Claus Ekstrøm <ekstrom@sund.ku.dk>
 }
-

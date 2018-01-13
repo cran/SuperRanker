@@ -3,19 +3,20 @@
 \name{sra}
 \alias{sra}
 \alias{sra.default}
-\alias{sra.list}
 \alias{sra.matrix}
+\alias{sra.list}
 \title{Compute the sequential rank agreement}
 \usage{
-sra(object, B, na.strings, nitems, type, ...)
+sra(object, B, na.strings, nitems, type, epsilon = 0, ...)
 
-\method{sra}{default}(object, B, na.strings, nitems, type, ...)
+\method{sra}{default}(object, B, na.strings, nitems, type, epsilon = 0, ...)
 
 \method{sra}{matrix}(object, B = 1, na.strings = NULL,
-  nitems = nrow(object), type = c("sd", "mad"), ...)
+  nitems = nrow(object), type = c("sd", "mad"), epsilon = 0, ...)
 
 \method{sra}{list}(object, B = 1, na.strings = NULL,
-  nitems = max(sapply(object, length)), type = c("sd", "mad"), ...)
+  nitems = max(sapply(object, length)), type = c("sd", "mad"),
+  epsilon = 0, ...)
 }
 \arguments{
 \item{object}{Either matrix where each column is a ranked list of
@@ -31,10 +32,12 @@ over in the case of censored observations}
 values in addition to NA. Defaults to NULL which means only NA
 are censored values.}
 
-\item{nitems}{Claus: please describe this argument}
+\item{nitems}{The total number of items in the original lists if we only have partial lists available.}
 
 \item{type}{The type of measure to use. Either sd (standard
-deviation - the default) or mad (median absolute deviance)}
+deviation - the default) or mad (median absolute deviance around the median)}
+
+\item{epsilon}{A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items.}
 
 \item{...}{Arguments passed to methods.}
 }
@@ -76,4 +79,3 @@ sra(Clist,na.strings="z",B=10)
 \author{
 Claus Ekstrøm <ekstrom@sund.ku.dk> and Thomas A Gerds <tag@biostat.ku.dk>
 }
-

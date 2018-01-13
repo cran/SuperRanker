@@ -10,9 +10,10 @@
 #' @param na.strings A vector of strings/values that represent missing
 #'     values in addition to NA. Defaults to NULL which means only NA
 #'     are censored values.
-#' @param nitems Claus: please describe this argument
+#' @param nitems The total number of items in the original lists if we only have partial lists available.
 #' @param type The type of measure to use. Either sd (standard
-#'     deviation - the default) or mad (median absolute deviance)
+#'     deviation - the default) or mad (median absolute deviance around the median)
+#' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items.   
 #' @param ... Arguments passed to methods.
 #' @return A vector of the sequential rank agreement
 ##' @examples
@@ -47,19 +48,19 @@
 #'
 #' @rdname sra
 #' @export
-sra <- function(object,B,na.strings,nitems,type,...) {
+sra <- function(object,B,na.strings,nitems,type,epsilon=0,...) {
   UseMethod("sra")
 }
 
 #' @rdname sra
 #' @export
-sra.default <- function(object,B,na.strings,nitems,type,...) {
+sra.default <- function(object,B,na.strings,nitems,type,epsilon=0,...) {
     stop("Input must be either a matrix, a data.frame or a list.")
 }
 
 #' @rdname sra
 #' @export
-sra.matrix <- function(object, B=1, na.strings=NULL, nitems=nrow(object), type=c("sd", "mad"),...) {
+sra.matrix <- function(object, B=1, na.strings=NULL, nitems=nrow(object), type=c("sd", "mad"),epsilon=0,...) {
     if (!is.matrix(object))
         stop("Input object must be a matrix")
 
@@ -81,14 +82,14 @@ sra.matrix <- function(object, B=1, na.strings=NULL, nitems=nrow(object), type=c
         object <- rbind(object, glue)
     }
     object <- lapply(1:NCOL(object),function(j)object[,j]) # Convert matrix to list
-    sra.list(object, B=B, nitems=nitems, type=type)
+    sra.list(object, B=B, nitems=nitems, type=type, epsilon=epsilon)
 }
 
 
 
 #' @rdname sra
 #' @export
-sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, length)), type=c("sd", "mad"),...) {
+sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, length)), type=c("sd", "mad"),epsilon=0,...) {
     # Make sure that the input object ends up as a matrix with integer columns all
     # consisting of elements from 1 and up to listlength
 
@@ -169,7 +170,7 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
         })
         ## bind lists
         rankmat <- do.call("cbind",obj.b)
-        res <- sracppfull(rankmat, type=itype)
+        res <- sracppfull(rankmat, type=itype, epsilon=epsilon)$sra
         res
     })
     if (itype==0) {
@@ -181,8 +182,24 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
     class(agreement) <- "sra"
     attr(agreement, "B") <- B
     attr(agreement, "type") <- type
+    attr(agreement, "epsilon") <- epsilon
+    if (B==1) {
+        # Refit once more to get the depths
+        obj.b <- lapply(1:nlists,function(j){
+            list <- object[[j]]
+            if (nmiss[[j]]>0){
+                list[list==0] <- resample(missing.items[[j]])
+            }
+            list
+        })
+        ## bind lists                                                                                                                                                      
+        rankmat <- do.call("cbind",obj.b)
+        
+        attr(agreement, "whenIncluded") <- sracppfull(rankmat, type=itype, epsilon=epsilon)$whenIncluded
+    } else {
+        attr(agreement, "whenIncluded") <- NA
+    }
     agreement
-
 }
 
 
@@ -195,11 +212,12 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
 #' @param B An integer giving the number of randomizations to sample
 #'     over in the case of censored observations
 #' @param n Integer: the number of permutation runs. For each permutation run we permute each of the lists in object
-#' and compute corresponding the sequential rank agreement curves 
+#' and compute corresponding the sequential rank agreement curves
 #' @param na.strings A vector of character values that represent
 #'     censored observations
 #' @param type The type of measure to use. Either sd (standard
 #'     deviation - the default) or mad (median absolute deviance)
+#' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items. Should usually be low.  
 #' @return A matrix with n columns and the same number of rows as for the input object. Each column contains one
 #' simulated sequential rank agreement curve from one permutation run.
 #' @author Claus Ekstrøm <ekstrom@@sund.ku.dk>
@@ -212,7 +230,7 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
 #' random_list_sra(mlist, n=5)
 #'
 #' @export
-random_list_sra <- function(object, B=1, n=1, na.strings=NULL, type=c("sd", "mad")) {
+random_list_sra <- function(object, B=1, n=1, na.strings=NULL, type=c("sd", "mad"), epsilon=0) {
 
     type <- match.arg(type)
 
@@ -233,7 +251,7 @@ random_list_sra <- function(object, B=1, n=1, na.strings=NULL, type=c("sd", "mad
         for (j in 1:ncol(object)) {
             object[,j] <- c(sample(nitems, size=notmiss[j]), rep(NA, nitems-notmiss[j]))
         }
-        sra(object, B=B, type=type)
+        sra(object, B=B, type=type, epsilon=epsilon)
     })
     res
 
@@ -241,12 +259,12 @@ random_list_sra <- function(object, B=1, n=1, na.strings=NULL, type=c("sd", "mad
 
 
 
-#' Smooth quantiles of a matrix of sequential ranked agreements. 
+#' Smooth quantiles of a matrix of sequential ranked agreements.
 #'
 #' @param object A matrix
 #' @param confidence the limits to compute
 #' @return A list containing two vectors for the smoothed lower and upper limits
-#' @author Claus Ekstrøm <ekstrom@@sund.ku.dk> 
+#' @author Claus Ekstrøm <ekstrom@@sund.ku.dk>
 #' @examples
 #' # setting with 3 lists
 #' mlist <- matrix(cbind(1:8,c(1,2,3,5,6,7,4,8),c(1,5,3,4,2,8,7,6)),ncol=3)
@@ -282,13 +300,13 @@ smooth_sra <- function(object, confidence=0.95) {
 #' test_sra(x,null)
 #' # compare to when we use the result of the first permutation run
 #' test_sra(null[,1],null[,-1])
-#' 
+#'
 #' @export
 test_sra <- function(object, nullobject, weights=1) {
     ## Sanity checks
     if (! (length(weights) %in% c(1, length(object))))
         stop("the vector of weights must have the same length as the number of items")
-    
+
     ## Test statistic
     T <- max(weights*abs(object - apply(nullobject, 1, mean)))
 
