@@ -16,34 +16,34 @@
 #' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items.   
 #' @param ... Arguments passed to methods.
 #' @return A vector of the sequential rank agreement
-##' @examples
-##'
-##' mlist <- matrix(cbind(1:8,c(1,2,3,5,6,7,4,8),c(1,5,3,4,2,8,7,6)),ncol=3)
-##' sra(mlist)
-##'
-##' mlist <- matrix(cbind(1:8,c(1,2,3,5,6,7,4,8),c(1,5,3,4,2,8,7,6)),ncol=3)
-##' sra(mlist, nitems=20, B=10)
-##'
-##' alist <- list(a=1:8,b=sample(1:8),c=sample(1:8))
-##' sra(alist)
-##'
-##' blist <- list(x1=letters,x2=sample(letters),x3=sample(letters))
-##' sra(blist)
-##'
-##' ## censored lists are either too short
-##' clist <- list(x1=c("a","b","c","d","e","f","g","h"),
-##'               x2=c("h","c","f","g","b"),
-##'               x3=c("d","e","a"))
-##' set.seed(17)
-##' sra(clist,na.strings="z",B=10)
-##'
-##' ## or use a special code for missing elements
-##' Clist <- list(x1=c("a","b","c","d","e","f","g","h"),
-##'               x2=c("h","c","f","g","b","z","z","z"),
-##'               x3=c("d","e","a","z","z","z","z","z"))
-##' set.seed(17)
-##' sra(Clist,na.strings="z",B=10)
-##'
+#' @examples
+#'
+#' mlist <- matrix(cbind(1:8,c(1,2,3,5,6,7,4,8),c(1,5,3,4,2,8,7,6)),ncol=3)
+#' sra(mlist)
+#'
+#' mlist <- matrix(cbind(1:8,c(1,2,3,5,6,7,4,8),c(1,5,3,4,2,8,7,6)),ncol=3)
+#' sra(mlist, nitems=20, B=10)
+#'
+#' alist <- list(a=1:8,b=sample(1:8),c=sample(1:8))
+#' sra(alist)
+#'
+#' blist <- list(x1=letters,x2=sample(letters),x3=sample(letters))
+#' sra(blist)
+#'
+#' ## censored lists are either too short
+#' clist <- list(x1=c("a","b","c","d","e","f","g","h"),
+#'               x2=c("h","c","f","g","b"),
+#'               x3=c("d","e","a"))
+#' set.seed(17)
+#' sra(clist,na.strings="z",B=10)
+#'
+#' ## or use a special code for missing elements
+#' Clist <- list(x1=c("a","b","c","d","e","f","g","h"),
+#'               x2=c("h","c","f","g","b","z","z","z"),
+#'               x3=c("d","e","a","z","z","z","z","z"))
+#' set.seed(17)
+#' sra(Clist,na.strings="z",B=10)
+#'
 #' @author Claus Ekstrøm <ekstrom@@sund.ku.dk> and Thomas A Gerds <tag@@biostat.ku.dk>
 #'
 #' @rdname sra
@@ -208,13 +208,14 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
 #' Simulate sequential rank agreement from completely uninformative lists (ie., raw permutations of items) and compute the corresponding sequential rank agreement curves.
 #' The following attributes are copied from the input object: number of lists, number of items and amount of censoring.
 #'
-#' @param object A matrix or list of vectors representing ranked lists.
+#' @param object A matrix of numbers or list of vectors representing ranked lists.
 #' @param B An integer giving the number of randomizations to sample
 #'     over in the case of censored observations
 #' @param n Integer: the number of permutation runs. For each permutation run we permute each of the lists in object
 #' and compute corresponding the sequential rank agreement curves
 #' @param na.strings A vector of character values that represent
 #'     censored observations
+#' @param nitems The total number of items in the original lists if we only have partial lists available. Will be derived from the unique elements of the object if set to \code{NULL} (the default)
 #' @param type The type of measure to use. Either sd (standard
 #'     deviation - the default) or mad (median absolute deviance)
 #' @param epsilon A non-negative numeric vector that contains the minimum limit in proportion of lists that must show the item. Defaults to 0. If a single number is provided then the value will be recycles to the number of items. Should usually be low.  
@@ -230,28 +231,45 @@ sra.list <- function(object, B=1, na.strings=NULL, nitems=max(sapply(object, len
 #' random_list_sra(mlist, n=5)
 #'
 #' @export
-random_list_sra <- function(object, B=1, n=1, na.strings=NULL, type=c("sd", "mad"), epsilon=0) {
+random_list_sra <- function(object, B=1, n=1, na.strings=NULL, nitems=NULL, type=c("sd", "mad"), epsilon=0) {
 
     type <- match.arg(type)
 
     ## Make sure that the input object ends up as a matrix with integer columns all
     ## consisting of elements from 1 and up to listlength
-    if (!is.matrix(object))
-        object <- as.matrix(do.call("cbind",object))
+    if (is.list(object)) {
 
-    ## Convert all missing types to NAs
-    if (!is.null(na.strings)) {
-        object[object %in% na.strings] <- NA
+        ## Find largst length
+        largest <- max(sapply(object, function(i) { length(i)}))
+
+        ## Unique non-missing elements
+        obj <- matrix(rep(NA, largest*length(object)), ncol=length(object))
+
+        for (i in 1:length(object)) {
+            obj[1:length(object[[i]]), i] <- object[[i]]
+        }
+
+        ## Convert all missing types to NAs
+        if (!is.null(na.strings)) {
+            obj[obj %in% na.strings] <- NA
+        }
+    } else {
+      obj <- as.matrix(object)
+    }   
+
+    listlengths <- nrow(obj)
+    if (is.null(nitems)) {
+        nitems <- 1
     }
-
-    nitems <- nrow(object)
-    notmiss <- apply(object, 2, function(x) {sum(!is.na(x))} )
+    nitems <- max(nitems, NROW(obj), sum(!is.na(unique(as.vector(obj)))))
+    
+    notmiss <- apply(obj, 2, function(x) {sum(!is.na(x))} )
     res <- sapply(1:n, function(i) {
         ## Do a permutation with the same number of missing
-        for (j in 1:ncol(object)) {
-            object[,j] <- c(sample(nitems, size=notmiss[j]), rep(NA, nitems-notmiss[j]))
+        for (j in 1:ncol(obj)) {
+            obj[,j] <- c(sample(nitems, size=notmiss[j]), rep(NA, listlengths-notmiss[j]))
         }
-        sra(object, B=B, type=type, epsilon=epsilon)
+        sra(obj, B=B, nitems=nitems, type=type, epsilon=epsilon)
     })
     res
 
@@ -308,12 +326,12 @@ test_sra <- function(object, nullobject, weights=1) {
         stop("the vector of weights must have the same length as the number of items")
 
     ## Test statistic
-    T <- max(weights*abs(object - apply(nullobject, 1, mean)))
+    T <- max(weights*abs(object - rowMeans(nullobject)))
 
     ## Now compute the individual jackknife variations from the null object
     B <- ncol(nullobject)
     nullres <- sapply(1:B, function(i) {
-        max(weights*abs(nullobject[,i] - apply(nullobject[,-i], 1, mean)))
+        max(weights*abs(nullobject[,i] - rowMeans(nullobject[,-i])))
     })
 
     res <- sum(nullres>=T)/(B+1)
