@@ -4,6 +4,7 @@
 #'
 #' @docType package
 #' @name SuperRanker
+#' @aliases SuperRanker-package
 #' @useDynLib SuperRanker
 #' @importFrom Rcpp sourceCpp
 #' @importFrom stats quantile
